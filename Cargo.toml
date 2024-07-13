@@ -1,0 +1,9 @@
+[package]
+name = "git-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha1 = "0.10.5"
+chrono = "0.4"
+clap = { version = "4.0", features = ["derive"] }
