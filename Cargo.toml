@@ -7,3 +7,4 @@ edition = "2021"
 sha1 = "0.10.5"
 chrono = "0.4"
 clap = { version = "4.0", features = ["derive"] }
+hex = "0.4"
