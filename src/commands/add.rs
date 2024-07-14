@@ -1,10 +1,10 @@
 use crate::utils::{hash_object, process_entry};
+use globset::{Glob, GlobSetBuilder};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 pub fn add(file_path: &str) {
     if file_path.eq(".") {
-        println!("Se mete dentro del punto");
         let entries: Vec<PathBuf> = match fs::read_dir(".") {
             Ok(entries) => entries
                 .map(|res| res.map(|e| e.path()))

@@ -1,3 +1,0 @@
-pub fn commit(a: &String, b: &String) {
-    println!("Commit hecho")
-}

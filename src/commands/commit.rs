@@ -1,6 +1,6 @@
 use crate::utils::*;
 use chrono::Utc;
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, io::Write};
 
 pub fn commit(message: &str, author: &str) {
     // Step 1: Generate the tree hash
@@ -13,14 +13,17 @@ pub fn commit(message: &str, author: &str) {
 
     // Step 3: Create the commit content
     let timestamp = Utc::now().timestamp();
-    let commit_content = format!(
-        "tree {}\nparent {}\nauthor {} {}\n\n{}",
-        tree_hash,
-        parent_commit.unwrap_or_default(),
-        author,
-        timestamp,
-        message
-    );
+    let commit_content = if let Some(parent) = parent_commit {
+        format!(
+            "tree {}\nparent {}\nauthor {} {}\n\n{}",
+            tree_hash, parent, author, timestamp, message
+        )
+    } else {
+        format!(
+            "tree {}\nauthor {} {}\n\n{}",
+            tree_hash, author, timestamp, message
+        )
+    };
 
     // Step 4: Calculate the commit hash
     let commit_hash = hash_object(commit_content.as_bytes(), "commit");
@@ -34,6 +37,16 @@ pub fn commit(message: &str, author: &str) {
 
     // Step 6: Update the HEAD to point to the new commit
     fs::write(".minigit/HEAD", &commit_hash).expect("Failed to update HEAD");
+
+    // Step 7: Append the new commit to the log
+    let log_entry = format!("{}\n", commit_hash);
+    fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(".minigit/log")
+        .expect("Failed to open log file")
+        .write_all(log_entry.as_bytes())
+        .expect("Failed to write to log file");
 
     println!("Created commit with hash {}", commit_hash);
 }

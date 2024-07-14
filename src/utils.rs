@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use globset::{Glob, GlobSetBuilder};
 use sha1::{Digest, Sha1};
 pub fn hash_object(data: &[u8], obj_type: &str) -> String {
     let mut hasher = Sha1::new();
@@ -12,6 +13,30 @@ pub fn hash_object(data: &[u8], obj_type: &str) -> String {
     hex::encode(hasher.finalize())
 }
 pub fn process_entry(entry: &Path) {
+    // Leer las rutas ignoradas desde .minigitignore
+    let ignored_patterns = match fs::read_to_string(".minigitignore") {
+        Ok(contents) => contents
+            .lines()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>(),
+        Err(_) => Vec::new(),
+    };
+
+    // Crear el conjunto de patrones ignorados
+    let mut builder = GlobSetBuilder::new();
+    for pattern in ignored_patterns {
+        builder.add(Glob::new(&pattern).unwrap());
+    }
+    let ignored_set = builder.build().unwrap();
+
+    // Verificar si una ruta debe ser ignorada
+    let should_ignore = |path: &Path| -> bool {
+        let path_str = path.to_str().unwrap_or("");
+        ignored_set.is_match(path_str)
+    };
+    if should_ignore(entry) {
+        return;
+    }
     if entry.is_dir() {
         println!("{:?} is a directory. Entering directory.", entry);
         match fs::read_dir(entry) {
@@ -116,5 +141,61 @@ pub fn get_head_commit() -> Option<String> {
     match fs::read_to_string(".minigit/HEAD") {
         Ok(commit_hash) => Some(commit_hash.trim().to_string()),
         Err(_) => None,
+    }
+}
+
+pub fn get_commit_tree(
+    commit_hash: &str,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    let commit_path = format!(
+        ".minigit/objects/{}/{}",
+        &commit_hash[0..2],
+        &commit_hash[2..]
+    );
+    let commit_content = fs::read_to_string(commit_path)?;
+
+    let tree_hash = commit_content
+        .lines()
+        .find(|line| line.starts_with("tree "))
+        .ok_or("No tree hash found")?;
+    let tree_hash = tree_hash.trim_start_matches("tree ").to_string();
+
+    get_tree(&tree_hash)
+}
+
+fn get_tree(tree_hash: &str) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    let tree_path = format!(".minigit/objects/{}/{}", &tree_hash[0..2], &tree_hash[2..]);
+    let tree_content = fs::read_to_string(tree_path)?;
+
+    let mut tree = HashMap::new();
+    for entry in tree_content.lines() {
+        let parts: Vec<&str> = entry.split('\0').collect();
+        if parts.len() != 2 {
+            return Err("Invalid tree entry format".into());
+        }
+        let (metadata, hash) = (parts[0], parts[1]);
+        let path = metadata
+            .split(' ')
+            .nth(1)
+            .ok_or("Invalid tree entry format")?;
+        tree.insert(path.to_string(), hash.to_string());
+    }
+
+    Ok(tree)
+}
+
+pub fn compare_trees(tree1: &HashMap<String, String>, tree2: &HashMap<String, String>) {
+    for (path, hash) in tree1 {
+        match tree2.get(path) {
+            Some(other_hash) if hash == other_hash => (),
+            Some(_) => println!("Modified: {}", path),
+            None => println!("Deleted: {}", path),
+        }
+    }
+
+    for path in tree2.keys() {
+        if !tree1.contains_key(path) {
+            println!("New file: {}", path);
+        }
     }
 }
