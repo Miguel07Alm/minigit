@@ -9,4 +9,3 @@ chrono = "0.4"
 clap = { version = "4.0", features = ["derive"] }
 hex = "0.4"
 globset = "0.4.14"
-toml = "0.5"

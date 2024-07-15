@@ -1,8 +1,7 @@
+use std::{collections::HashMap, fs, path::Path};
+
 use globset::{Glob, GlobSetBuilder};
 use sha1::{Digest, Sha1};
-use std::{collections::HashMap, fs, path::Path};
-use toml::Value;
-
 pub fn hash_object(data: &[u8], obj_type: &str) -> String {
     let mut hasher = Sha1::new();
     hasher.update(format!("{} {}\0", obj_type, data.len()).as_bytes());
@@ -153,31 +152,25 @@ pub fn get_head_commit() -> Option<String> {
 pub fn get_commit_tree(
     commit_hash: &str,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    println!("commit_hash: {}", commit_hash);
     let commit_path = format!(
         ".minigit/objects/{}/{}",
         &commit_hash[0..2],
         &commit_hash[2..]
     );
     let commit_content = fs::read_to_string(commit_path)?;
-    println!("commit_content: \n{}", commit_content);
 
     let tree_hash = commit_content
         .lines()
-        .find(|line| line.starts_with("tree"))
+        .find(|line| line.starts_with("tree "))
         .ok_or("No tree hash found")?;
-    let tree_hash = tree_hash.trim_start_matches("tree").trim().to_string();
-    println!("tree_hash: \n{}", tree_hash);
+    let tree_hash = tree_hash.trim_start_matches("tree ").to_string();
 
     get_tree(&tree_hash)
 }
 
 fn get_tree(tree_hash: &str) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let tree_path = format!(".minigit/objects/{}/{}", &tree_hash[0..2], &tree_hash[2..]);
-    println!("tree_path: \n{}", tree_path);
-
     let tree_content = fs::read_to_string(tree_path)?;
-    println!("tree_content: \n{}", tree_content);
 
     let mut tree = HashMap::new();
     for entry in tree_content.lines() {
@@ -210,26 +203,4 @@ pub fn compare_trees(tree1: &HashMap<String, String>, tree2: &HashMap<String, St
             println!("New file: {}", path);
         }
     }
-}
-
-pub fn get_author_info() -> (String, String) {
-    let config_path = Path::new(".minigit/config");
-    let config_content = fs::read_to_string(config_path).expect("Failed to read config file");
-    let config: Value = config_content.parse().expect("Failed to parse config file");
-
-    let name = config
-        .get("user")
-        .and_then(|u| u.get("name"))
-        .and_then(|n| n.as_str())
-        .expect("User name not found in config")
-        .to_string();
-
-    let email = config
-        .get("user")
-        .and_then(|u| u.get("email"))
-        .and_then(|e| e.as_str())
-        .expect("User email not found in config")
-        .to_string();
-
-    (name, email)
 }

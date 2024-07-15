@@ -1,29 +1,8 @@
-use crate::{commands::init::configure_minigit, utils::*};
+use crate::utils::*;
 use chrono::Utc;
-use std::{collections::HashMap, fs, io::Write, path::Path, process::Command};
+use std::{collections::HashMap, fs, io::Write};
 
-pub fn commit() {
-    if !Path::new(".minigit/config").exists() {
-        configure_minigit();
-    }
-    // Obtener la información del autor desde la configuración
-    let (author_name, author_email) = get_author_info();
-    let author = format!("{} <{}>", author_name, author_email);
-
-    // Crear el archivo COMMIT_EDITMSG
-    let commit_msg_path = ".minigit/COMMIT_EDITMSG";
-    fs::create_dir_all(".minigit").expect("Failed to create .minigit directory");
-    fs::File::create(commit_msg_path).expect("Failed to create COMMIT_EDITMSG");
-
-    // Abrir el archivo en el editor nano
-    Command::new("nano")
-        .arg(commit_msg_path)
-        .status()
-        .expect("Failed to open nano editor");
-
-    // Leer el contenido del archivo
-    let message = fs::read_to_string(commit_msg_path).expect("Failed to read commit message");
-
+pub fn commit(message: &str, author: &str) {
     // Step 1: Generate the tree hash
     let mut index = HashMap::new();
     collect_entries(".", &mut index);
