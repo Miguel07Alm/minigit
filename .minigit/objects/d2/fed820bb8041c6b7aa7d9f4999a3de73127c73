@@ -20,11 +20,7 @@ fn main() {
             }
         }
         "commit" => {
-            if args.len() < 4 {
-                eprintln!("Usage: commit <message> <author>");
-            } else {
-                commands::commit::commit(&args[2], &args[3]);
-            }
+            commands::commit::commit();
         }
         "status" => commands::status::status(),
         _ => eprintln!("Unknown command"),

@@ -97,6 +97,41 @@ pub fn process_entry(entry: &Path) {
 }
 
 pub fn collect_entries(path: &str, index: &mut HashMap<String, String>) {
+    // Leer las rutas ignoradas desde .minigitignore
+    let ignored_patterns = match fs::read_to_string(".minigitignore") {
+        Ok(contents) => contents
+            .lines()
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<String>>(),
+        Err(_) => Vec::new(),
+    };
+    println!("{:?}", ignored_patterns);
+
+    // Crear el conjunto de patrones ignorados
+    let mut builder = GlobSetBuilder::new();
+    for pattern in ignored_patterns {
+        // Preprocesar los patrones para asegurarse de que sean interpretados correctamente
+        let pattern = if pattern.starts_with("/") {
+            format!("**{}", pattern)
+        } else {
+            pattern
+        };
+        builder.add(Glob::new(&pattern).unwrap());
+    }
+    let ignored_set = builder.build().unwrap();
+
+    // Verificar si una ruta debe ser ignorada
+    let should_ignore = |path: &Path| -> bool {
+        let path_str = path.to_str().unwrap_or("");
+        println!("path_str: {}", path_str);
+        // Verificar tanto la ruta relativa como absoluta
+        ignored_set.is_match(path_str)
+            || ignored_set.is_match(&*path.canonicalize().unwrap().to_string_lossy())
+    };
+    if should_ignore(Path::new(path)) {
+        println!("{} is ignored!", &path);
+        return;
+    }
     let entries = match fs::read_dir(path) {
         Ok(entries) => entries,
         Err(err) => {
@@ -135,12 +170,25 @@ pub fn write_tree(index: &HashMap<String, String>) -> String {
     let mut tree_entries = Vec::new();
 
     for (path, hash) in index {
+        // Crear una entrada en el formato: "<mode> <path>\0<hash>"
         let entry = format!("{} {}\0{}", "100644", path, hash);
         tree_entries.push(entry);
     }
 
-    let tree_content = tree_entries.join("");
-    hash_object(tree_content.as_bytes(), "tree")
+    // Unir todas las entradas en un solo contenido de árbol
+    let tree_content = tree_entries.join("\n");
+
+    // Calcular el hash del contenido del árbol
+    let tree_hash = hash_object(tree_content.as_bytes(), "tree");
+
+    // Guardar el objeto árbol en el sistema de archivos
+    let dir_path = format!(".minigit/objects/{}", &tree_hash[0..2]);
+    let file_path = format!("{}/{}", dir_path, &tree_hash[2..]);
+
+    fs::create_dir_all(&dir_path).expect("Failed to create directories");
+    fs::write(&file_path, tree_content).expect("Failed to write tree object");
+
+    tree_hash
 }
 
 pub fn get_head_commit() -> Option<String> {
@@ -181,13 +229,14 @@ fn get_tree(tree_hash: &str) -> Result<HashMap<String, String>, Box<dyn std::err
 
     let mut tree = HashMap::new();
     for entry in tree_content.lines() {
+        // Leer líneas separadas por saltos de línea
         let parts: Vec<&str> = entry.split('\0').collect();
         if parts.len() != 2 {
             return Err("Invalid tree entry format".into());
         }
         let (metadata, hash) = (parts[0], parts[1]);
         let path = metadata
-            .split(' ')
+            .split_whitespace()
             .nth(1)
             .ok_or("Invalid tree entry format")?;
         tree.insert(path.to_string(), hash.to_string());
